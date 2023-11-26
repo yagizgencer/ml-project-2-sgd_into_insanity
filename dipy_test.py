@@ -31,18 +31,27 @@ d_perp = 0.0003#0.2
 eigenvals = [d_parallel, d_perp, d_perp]
 
 # Generate n pairs of angles 
-n = 300
-angle_values = np.linspace(0,360,int(1e3))
-angle_pairs = []
+n = 180
 H = np.zeros((n, len(bvals)))
+H_noisy = np.zeros((n, len(bvals)))
+thetas = []
+phis = []
+np.random.seed(2)
 for i in range(n):
-    #angle_pair = (st.uniform(scale=180).rv(size=1), st.uniform(scale=360).rv(size=1))
-    angle_pair = (np.random.uniform(0,180), np.random.uniform(0,360))
-    angle_pairs.append(angle_pair)
-    H[i] = multi_tensor(gtab, [eigenvals], S0=100, angles=[angle_pair], fractions=[100], snr=None)[0]
+    thetas.append(np.random.uniform(0,90))
+    phis.append(np.random.uniform(0,360))
+
+hemisphere = HemiSphere(theta=thetas, phi=phis)
+hemisphere, _ = disperse_charges(hemisphere,50000)
+
+angle_pairs = []
+for i in range(len(hemisphere.phi)):
+    angle_pairs.append((hemisphere.theta[i] * (180/np.pi), hemisphere.phi[i] * (180/np.pi)))
+    H[i] = multi_tensor(gtab, mevals = [eigenvals], S0=100, angles = [angle_pairs[i]], fractions = [100], snr = None)[0]
+    H_noisy[i] = multi_tensor(gtab, mevals = [eigenvals], S0=100, angles = [angle_pairs[i]], fractions = [100], snr = 20)[0]
 
 
-N = int(1e3)
+N = int(1e5)
 # Generating Nf
 Nf = np.random.randint(3, size=N) + 1
 
@@ -56,37 +65,7 @@ for i, k in enumerate(Nf):
     random_nums /= np.sum(random_nums)
     for j in range(k):
         S[i] += random_nums[j] * H[indices[j]]
-        # SNR 20-30
         F[i][indices[j]] = random_nums[j]
-    #S[i] = np.sum(random_nums * H[indices])
-
-"""sphere = get_sphere('repulsion724')
-sphere = sphere.subdivide(2)
-
-#Creating the orientation distribution function:
-non_zero_indices = np.nonzero(F[0])
-angles = []
-fractions = []
-for index in non_zero_indices:
-    angles.append(angle_pairs[index])
-    fractions.append(F[0][index])
-odf = multi_tensor_odf(sphere.vertices, eigenvals, angles, fractions)
-
-# Enables/disables interactive visualization
-interactive = False
-
-scene = window.Scene()
-
-odf_actor = actor.odf_slicer(odf[None, None, None, :], sphere=sphere,
-                             colormap='plasma')
-odf_actor.RotateX(90)
-
-scene.add(odf_actor)
-
-print('Saving illustration as multi_tensor_simulation')
-window.record(scene, out_path='multi_tensor_simulation.png', size=(300, 300))
-if interactive:
-    window.show(scene)"""
 
 print(np.shape(S))
 print(np.shape(H))
@@ -95,8 +74,4 @@ print(np.shape(F))
 np.save("S.npy",S)
 np.save("F.npy",F)
 np.save("H.npy",H)
-
-
-
-
-
+np.save("H_noisy.npy",H_noisy)
