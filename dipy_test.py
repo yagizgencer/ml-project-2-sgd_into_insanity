@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import pickle
 
 from dipy.core.sphere import disperse_charges, HemiSphere
 from dipy.core.gradients import gradient_table
@@ -60,9 +62,11 @@ S = np.zeros((N, len(bvals)))
 F = np.zeros((N,n))
 for i, k in enumerate(Nf):
     indices = np.random.randint(n, size=k)
-    #random_nums = st.uniform().rv(size=k)
     random_nums = np.random.uniform(size=k)
     random_nums /= np.sum(random_nums)
+    random_nums[random_nums < 0.10] = 0
+    random_nums /= np.sum(random_nums)
+    Nf[i] = np.sum(random_nums >= 0)
     for j in range(k):
         S[i] += random_nums[j] * H[indices[j]]
         F[i][indices[j]] = random_nums[j]
@@ -75,3 +79,9 @@ np.save("S.npy",S)
 np.save("F.npy",F)
 np.save("H.npy",H)
 np.save("H_noisy.npy",H_noisy)
+
+with open('angle_pairs.pkl', 'wb') as file:
+    pickle.dump(angle_pairs, file)
+
+with open('Nf.pkl', 'wb') as file:
+    pickle.dump(Nf, file)
