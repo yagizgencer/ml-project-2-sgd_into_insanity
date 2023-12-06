@@ -38,6 +38,7 @@ eigenvals = [d_parallel, d_perp, d_perp]
 n = 180
 H_noisy_input = np.zeros((n, len(real_bvals)))
 H_noisy_validation = np.zeros((n, len(real_bvals)))
+H_noiseless = np.zeros((n, len(real_bvals)))
 thetas = []
 phis = []
 np.random.seed(2)
@@ -47,14 +48,25 @@ for i in range(n):
     phis.append(np.random.uniform(0,360))
 
 hemisphere = HemiSphere(theta=thetas, phi=phis)
-hemisphere, _ = disperse_charges(hemisphere,50000)
+hemisphere, _ = disperse_charges(hemisphere,int(1e5))
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(hemisphere.vertices[:,0], hemisphere.vertices[:,1], hemisphere.vertices[:,2], c='r', marker='o')
+
+# Set labels for each axis
+ax.set_xlabel('x Label')
+ax.set_ylabel('y Label')
+ax.set_zlabel('z Label')
+
+fig.savefig("angle_pairs_visualization_" + str(n) + "_pairs.png")
 
 angle_pairs = []
 for i in range(len(hemisphere.phi)):
     angle_pairs.append((hemisphere.theta[i] * (180/np.pi), hemisphere.phi[i] * (180/np.pi)))
     H_noisy_input[i] = multi_tensor(gtab, mevals = [eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100], snr=random.randint(10, 30))[0]
     H_noisy_validation[i] = multi_tensor(gtab, mevals = [eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100], snr=random.randint(10, 30))[0]
-
+    H_noiseless[i] = multi_tensor(gtab, mevals=[eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100],snr=None)[0]
 
 N = int(1e5)
 # Generating Nf
@@ -62,6 +74,7 @@ Nf = np.random.randint(3, size=N) + 1
 
 # Creating S and our ground-truth
 S = np.zeros((N, len(real_bvals)))
+S_noiseless = np.zeros((N, len(real_bvals)))
 F = np.zeros((N,n))
 for i, k in enumerate(Nf):
     indices = np.random.randint(n, size=k)
@@ -69,16 +82,19 @@ for i, k in enumerate(Nf):
     random_nums /= np.sum(random_nums)
     random_nums[random_nums < 0.10] = 0
     random_nums /= np.sum(random_nums)
-    Nf[i] = np.sum(random_nums >= 0)
+    Nf[i] = np.sum(random_nums > 0)
     for j in range(k):
         S[i] += random_nums[j] * H_noisy_input[indices[j]]
+        S_noiseless[i] += random_nums[j] * H_noiseless[indices[j]]
         F[i][indices[j]] = random_nums[j]
 
 
 np.save("synthetic_data/S.npy",S)
+np.save("synthetic_data/S_noiseless.npy",S_noiseless)
 np.save("synthetic_data/F.npy",F)
 np.save("synthetic_data/H_noisy_input.npy",H_noisy_input)
 np.save("synthetic_data/H_noisy_validation.npy",H_noisy_validation)
+np.save("synthetic_data/H_noiseless.npy",H_noiseless)
 
 with open('synthetic_data/angle_pairs.pkl', 'wb') as file:
     pickle.dump(angle_pairs, file)
