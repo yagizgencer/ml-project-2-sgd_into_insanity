@@ -61,20 +61,58 @@ phis = np.save("synthetic_data/phis.npy", np.array(hemisphere.phi))
 N = int(1e6)
 # Generating Nf
 Nf = np.random.randint(3, size=N) + 1
+print(np.shape(np.nonzero(Nf)[0]))
 
 # Creating S and our ground-truth
 S = np.zeros((N, len(real_bvals)))
 F = np.zeros((N,n))
 for i, k in enumerate(Nf):
-    indices = np.random.randint(n, size=k)
-    random_nums = np.random.uniform(size=k)
+    #indices = np.random.randint(n, size=k)
+    indices = np.random.choice(n, size=k, replace=False)
+    random_nums = np.random.uniform(low = 0.1, size=k)
     random_nums /= np.sum(random_nums)
-    random_nums[random_nums < 0.10] = 0
-    random_nums /= np.sum(random_nums)
-    Nf[i] = np.sum(random_nums >= 0)
+    # After thresholding
+    # Define the threshold and the minimum number of non-zero elements to retain
+    threshold = 0.10
+    min_non_zero = 1  # At least one non-zero entry
+    
+    # Apply threshold, but ensure at least 'min_non_zero' largest values remain non-zero
+    largest_indices = np.argpartition(random_nums, -min_non_zero)[-min_non_zero:]
+    random_nums_below_threshold = random_nums < threshold
+    random_nums_below_threshold[largest_indices] = False
+    random_nums[random_nums_below_threshold] = 0
+    
+    # Check if all values are zero after thresholding
+    if np.sum(random_nums) == 0:
+        print(f"Iteration {i}: All zero case encountered for row {i}")
+        random_nums[np.argmax(random_nums)] = 0.1
+        random_nums /= np.sum(random_nums)
+    
+    # Update the number of fibers (Nf)
+    Nf[i] = np.count_nonzero(random_nums)
+
     for j in range(k):
         S[i] += random_nums[j] * H_noisy_input[indices[j]]
+        #if(random_nums[j] != 0):
         F[i][indices[j]] = random_nums[j]
+
+    # Diagnostic print to check if a row in F is all zeros
+    if np.all(F[i] == 0):
+        print(f"Row {i} in F is all zeros - Random_nums: {random_nums}, Indices: {indices}")
+
+print(Nf)
+print(np.shape(F))
+# Check if any row contains only zeros
+rows_with_only_zeros = np.all(F == 0, axis=1)
+
+# Find the indices of such rows
+zero_rows_indices = np.where(rows_with_only_zeros)[0]
+
+# Print the indices of rows that contain only zeros
+if zero_rows_indices.size > 0:
+    print("Rows containing only zeros:", zero_rows_indices)
+else:
+    print("There are no rows containing only zeros.")
 
 
 np.save("synthetic_data/S.npy",S)
