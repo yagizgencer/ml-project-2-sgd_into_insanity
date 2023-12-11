@@ -48,7 +48,7 @@ for i in range(n):
     phis.append(np.random.uniform(0,360))
 
 hemisphere = HemiSphere(theta=thetas, phi=phis)
-hemisphere, _ = disperse_charges(hemisphere,int(1e5))
+hemisphere, _ = disperse_charges(hemisphere,int(50000))
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
@@ -77,12 +77,14 @@ S = np.zeros((N, len(real_bvals)))
 S_noiseless = np.zeros((N, len(real_bvals)))
 F = np.zeros((N,n))
 for i, k in enumerate(Nf):
-    indices = np.random.randint(n, size=k)
+    indices = np.random.choice(n, size=k, replace=False)
     random_nums = np.random.uniform(size=k)
     random_nums /= np.sum(random_nums)
     random_nums[random_nums < 0.10] = 0
     random_nums /= np.sum(random_nums)
     Nf[i] = np.sum(random_nums > 0)
+    if np.sum(random_nums) == 0:
+        print(f"Iteration {i}: All zero case encountered for row {i}")
     for j in range(k):
         S[i] += random_nums[j] * H_noisy_input[indices[j]]
         S_noiseless[i] += random_nums[j] * H_noiseless[indices[j]]

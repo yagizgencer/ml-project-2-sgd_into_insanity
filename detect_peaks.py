@@ -4,7 +4,7 @@ from dipy.core.gradients import gradient_table
 from dipy.data import get_sphere
 from dipy.sims.voxel import multi_tensor, multi_tensor_odf
 from dipy.direction import peak_directions
-import nibabel as nib
+import pandas as pd
 
 thetas = list(np.load("synthetic_data/thetas.npy"))
 phis = list(np.load("synthetic_data/phis.npy"))
@@ -51,16 +51,6 @@ def generate_peak_gt(F, thetas, phis):
 relative_peak_threshold = 0.1
 min_separation_angle = 15
 
-#peak_format = np.zeros((len(F), 15))
-#
-#for i, sample in enumerate(F):
-#    # Duplicate the sample for both hemispheres
-#    F_sphere = np.hstack((sample, sample)) / 2
-#
-#    # Find peak directions
-#    directions, values, indices = peak_directions(F_sphere, sphere, relative_peak_threshold, min_separation_angle)
-#    directions_flattened = directions.flatten()
-#    peak_format[i][0:len(directions_flattened)] = directions_flattened
 peak_format = detect_peaks(F, relative_peak_threshold, min_separation_angle)
 # Check if any row contains only zeros
 rows_with_only_zeros = np.all(peak_format == 0, axis=1)
@@ -74,19 +64,8 @@ if zero_rows_indices.size > 0:
 else:
     print("There are no rows containing only zeros.")
 
-reshaped_data = peak_format.reshape((100, 100, 100, 15))
+pd.to_pickle(peak_format, "synthetic_data/ground_truth_peaks_synthetic.pkl")
 
-# Create a NIfTI image (assuming affine as identity, you might need to adjust this)
-affine = np.eye(4)
-nifti_img = nib.Nifti1Image(reshaped_data, affine)
-
-# Save the NIfTI image
-nib.save(nifti_img, 'your_image.nii.gz')
-
-#print(np.shape(peak_format))
-# Saving the ground truth to a .ni.gzz file 
-#peaks = nib.load("your_image.nii.gz").get_fdata()
-#print(peaks)
 peaks_gt = generate_peak_gt(F, thetas, phis)
 print(peaks_gt)
 print(peak_format)

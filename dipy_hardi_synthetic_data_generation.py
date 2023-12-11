@@ -31,7 +31,7 @@ real_bvals = np.array(real_bvals).reshape(-1)
 
 gtab = gradient_table(real_bvals, real_bvecs)
 d_parallel = 0.0015
-d_perp = 0.00045
+d_perp = 0.00039
 eigenvals = [d_parallel, d_perp, d_perp]
 
 # Generate n pairs of angles 
