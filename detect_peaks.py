@@ -22,6 +22,7 @@ def detect_peaks(F, relative_peak_threshold, min_separation_angle):
 
         # Find peak directions
         directions, values, indices = peak_directions(F_sphere, sphere, relative_peak_threshold, min_separation_angle)
+        directions = sample[indices][:, np.newaxis] * directions # multiplying with fractions
         directions_flattened = directions.flatten()
         peak_format[i][0:len(directions_flattened)] = directions_flattened
     return peak_format

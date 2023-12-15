@@ -3,11 +3,25 @@ import numpy as np
 import pandas as pd
 import pickle
 import random
-from dipy.core.sphere import disperse_charges, HemiSphere
+from dipy.core.sphere import disperse_charges, HemiSphere, Sphere
 from dipy.core.gradients import gradient_table
 from dipy.data import get_sphere
 from dipy.sims.voxel import multi_tensor, multi_tensor_odf
+from dipy.direction import peak_directions
 #from dipy.viz import window, actor
+
+def detect_peaks(F, relative_peak_threshold, min_separation_angle):
+    peak_format = np.zeros((len(F), 15))
+    for i, sample in enumerate(F):
+        # Duplicate the sample for both hemispheres
+        F_sphere = np.hstack((sample, sample)) / 2
+
+        # Find peak directions
+        directions, values, indices = peak_directions(F_sphere, sphere, relative_peak_threshold, min_separation_angle)
+        directions = sample[indices][:, np.newaxis] * directions # multiplying with fractions
+        directions_flattened = directions.flatten()
+        peak_format[i][0:len(directions_flattened)] = directions_flattened
+    return peak_format
 
 with open('real_data/hardi-scheme.bvec.txt', 'r') as file:
     lines = file.readlines()
@@ -47,8 +61,13 @@ for i in range(n):
     thetas.append(np.random.uniform(0,90))
     phis.append(np.random.uniform(0,360))
 
+
 hemisphere = HemiSphere(theta=thetas, phi=phis)
 hemisphere, _ = disperse_charges(hemisphere,int(50000))
+sphere = Sphere(xyz=np.vstack((hemisphere.vertices, -hemisphere.vertices)))
+
+np.save("synthetic_data/thetas.npy", np.array(hemisphere.theta))
+np.save("synthetic_data/phis.npy", np.array(hemisphere.phi))
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
@@ -90,13 +109,20 @@ for i, k in enumerate(Nf):
         S_noiseless[i] += random_nums[j] * H_noiseless[indices[j]]
         F[i][indices[j]] = random_nums[j]
 
+# Parameters for peak detection
+relative_peak_threshold = 0.1
+min_separation_angle = 15
 
-np.save("synthetic_data/S.npy",S)
-np.save("synthetic_data/S_noiseless.npy",S_noiseless)
-np.save("synthetic_data/F.npy",F)
-np.save("synthetic_data/H_noisy_input.npy",H_noisy_input)
-np.save("synthetic_data/H_noisy_validation.npy",H_noisy_validation)
-np.save("synthetic_data/H_noiseless.npy",H_noiseless)
+peak_format = detect_peaks(F, relative_peak_threshold, min_separation_angle)
+
+pd.to_pickle(peak_format, "synthetic_data/peaks_synthetic_formatted.pkl")
+
+np.save("synthetic_data/S.npy", S)
+np.save("synthetic_data/S_noiseless.npy", S_noiseless)
+np.save("synthetic_data/F.npy", F)
+np.save("synthetic_data/H_noisy_input.npy", H_noisy_input)
+np.save("synthetic_data/H_noisy_validation.npy", H_noisy_validation)
+np.save("synthetic_data/H_noiseless.npy", H_noiseless)
 
 with open('synthetic_data/angle_pairs.pkl', 'wb') as file:
     pickle.dump(angle_pairs, file)

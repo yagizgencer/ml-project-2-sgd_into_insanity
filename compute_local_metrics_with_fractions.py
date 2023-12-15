@@ -6,8 +6,8 @@ from math import *
 import sys, glob, xlwt, os.path, re
 import pandas as pd
 
-ground_truth_path = ""
-prediction_path = ""
+ground_truth_path = "gt_peaks_val_set.pkl"
+prediction_path = "trained.pkl"
 
 # read ground-truth
 ground_truth = pd.read_pickle(ground_truth_path)
@@ -116,10 +116,11 @@ for i in range(len(ground_truth)):
 
     # precompute matrix with angular errors among all estimated and true fibers
     A = np.zeros((M_true, M_est))
-    for j in range(0,M_true):
-        for k in range(0,M_est):
-            err = acos(min(1.0, abs(np.dot(DIR_true[:,j], DIR_est[:,k])))) # crop to 1 for internal precision
+    for j in range(0, M_true):
+        for k in range(0, M_est):
+            err = acos(min(1.0, abs(np.dot(DIR_true[:, j], DIR_est[:, k])))) # crop to 1 for internal precision
             A[j,k] = min(err, pi-err) / pi * 180
+
 
     # compute the "base" error
     M = min(M_true,M_est)
@@ -131,11 +132,13 @@ for i in range(len(ground_truth)):
     for j in range(0, M):
         err[j] = np.min(AA)
         r, c = np.nonzero(AA == err[j])
+        r = r[0]
+        c = c[0]
         frac_err[j] = abs(frac_true[r] - frac_est[c])
-        AA[r[0],:] = float('Inf')
-        AA[:,c[0]] = float('Inf')
-        notUsed_true = notUsed_true[notUsed_true != r[0]]
-        notUsed_est = notUsed_est[notUsed_est != c[0]]
+        AA[r,:] = float('Inf')
+        AA[:,c] = float('Inf')
+        notUsed_true = notUsed_true[notUsed_true != r]
+        notUsed_est = notUsed_est[notUsed_est != c]
 
     # account for OVER-ESTIMATES
     if M_true < M_est:
