@@ -6,14 +6,10 @@ from math import *
 import sys, glob, xlwt, os.path, re
 import pandas as pd
 
-ground_truth_path = "gt_peaks_val_set.pkl"
-prediction_path = "trained.pkl"
+ground_truth_path = "real_data/ground_truth_peaks_padded.pkl"
 
 # read ground-truth
 ground_truth = pd.read_pickle(ground_truth_path)
-
-# read predictions
-predictions = pd.read_pickle(prediction_path)
 
 # prepare EXCEL output
 XLS = xlwt.Workbook()
@@ -66,149 +62,156 @@ XLS_sheet.write(0, 33, "FE, 50 perc")
 XLS_sheet.write(0, 34, "FE, 75 perc")
 XLS_sheet.write(0, 35, "FE, max")
 
-
+peak_size = 14
+predictions_files = glob.glob("trained_model/*.pkl")
 XLS_row = 1
 
-Pd = np.zeros(len(ground_truth))
-nP = np.zeros(len(ground_truth))
-nM = np.zeros(len(ground_truth))
-AE = np.zeros(len(ground_truth))
-FE = np.zeros(len(ground_truth))
+for file_name in predictions_files:
 
-for i in range(len(ground_truth)):
+    predictions = pd.read_pickle(file_name)
 
-    DIR_true = np.zeros((3, 5))
-    DIR_est = np.zeros((3, 5))
+    Pd = np.zeros(len(ground_truth))
+    nP = np.zeros(len(ground_truth))
+    nM = np.zeros(len(ground_truth))
+    AE = np.zeros(len(ground_truth))
+    FE = np.zeros(len(ground_truth))
 
-    frac_true = np.zeros(5)
-    frac_est = np.zeros(5)
+    for i in range(len(ground_truth)):
 
-    # compute M_true, DIR_true, M_est, DIR_est
-    M_true = 0
-    for d in range(5):
-        dir = ground_truth[i,range(d*3, d*3+3)]
-        f = norm(dir)
-        if f > 0:
-            frac_true[M_true] = f
-            DIR_true[:,M_true] = dir / f
-            M_true += 1
-    frac_true /= frac_true.sum()
+        DIR_true = np.zeros((3, peak_size))
+        DIR_est = np.zeros((3, peak_size))
 
-    M_est = 0
-    for d in range(5):
-        dir = predictions[i,range(d*3, d*3+3)]
-        f = norm(dir)
-        if f > 0:
-            frac_est[M_est] = f
-            DIR_est[:,M_est] = dir / f
-            M_est += 1
-    frac_est /= frac_est.sum()
+        frac_true = np.zeros(peak_size)
+        frac_est = np.zeros(peak_size)
 
-    # compute Pd, nM and nP
-    M_diff = M_true - M_est
-    Pd[i] = 100 * abs(M_diff) / M_true
-    if M_diff > 0:
-        nM[i] = M_diff
-    else:
-        nP[i] = -M_diff
+        # compute M_true, DIR_true, M_est, DIR_est
+        M_true = 0
+        for d in range(peak_size):
+            dir = ground_truth[i,range(d*3, d*3+3)]
+            f = norm(dir)
+            if f > 0:
+                frac_true[M_true] = f
+                DIR_true[:,M_true] = dir / f
+                M_true += 1
+        frac_true /= frac_true.sum()
 
-    # ANGULAR ACCURACY
+        M_est = 0
+        for d in range(peak_size):
+            dir = predictions[i, range(d*3, d*3+3)]
+            f = norm(dir)
+            if f > 0:
+                frac_est[M_est] = f
+                DIR_est[:,M_est] = dir / f
+                M_est += 1
+        frac_est /= frac_est.sum()
 
-    # precompute matrix with angular errors among all estimated and true fibers
-    A = np.zeros((M_true, M_est))
-    for j in range(0, M_true):
-        for k in range(0, M_est):
-            err = acos(min(1.0, abs(np.dot(DIR_true[:, j], DIR_est[:, k])))) # crop to 1 for internal precision
-            A[j,k] = min(err, pi-err) / pi * 180
-
-
-    # compute the "base" error
-    M = min(M_true,M_est)
-    err = np.zeros(M)
-    frac_err = np.zeros(M)
-    notUsed_true = np.array(range(M_true))
-    notUsed_est = np.array(range(M_est))
-    AA = np.copy(A)
-    for j in range(0, M):
-        err[j] = np.min(AA)
-        r, c = np.nonzero(AA == err[j])
-        r = r[0]
-        c = c[0]
-        frac_err[j] = abs(frac_true[r] - frac_est[c])
-        AA[r,:] = float('Inf')
-        AA[:,c] = float('Inf')
-        notUsed_true = notUsed_true[notUsed_true != r]
-        notUsed_est = notUsed_est[notUsed_est != c]
-
-    # account for OVER-ESTIMATES
-    if M_true < M_est:
-        if M_true > 0:
-            for j in notUsed_est:
-                err = np.append(err, min(A[:, j]))
-                frac_err = np.append(frac_err, frac_est[j])
+        # compute Pd, nM and nP
+        M_diff = M_true - M_est
+        Pd[i] = 100 * abs(M_diff) / M_true
+        if M_diff > 0:
+            nM[i] = M_diff
         else:
-            err = np.append(err, 45)
-            frac_err = np.append(frac_err, 1)
+            nP[i] = -M_diff
 
-    # account for UNDER-ESTIMATES
-    elif M_true > M_est:
-        if M_est > 0:
-            for j in notUsed_true:
-                err = np.append(err, min(A[j,:]))
-                frac_err = np.append(frac_err, frac_true[j])
-        else:
-            err = np.append(err, 45)
-            frac_err = np.append(frac_err, 1)
+        # ANGULAR ACCURACY
 
-    AE[i] = err.mean()
-    FE[i] = frac_err.sum()
+        # precompute matrix with angular errors among all estimated and true fibers
+        A = np.zeros((M_true, M_est))
+        for j in range(0, M_true):
+            for k in range(0, M_est):
+                err = acos(min(1.0, abs(np.dot(DIR_true[:, j], DIR_est[:, k])))) # crop to 1 for internal precision
+                A[j,k] = min(err, pi-err) / pi * 180
 
 
-XLS_sheet.write(XLS_row, 0,  "cv metrics")
+        # compute the "base" error
+        M = min(M_true,M_est)
+        err = np.zeros(M)
+        frac_err = np.zeros(M)
+        notUsed_true = np.array(range(M_true))
+        notUsed_est = np.array(range(M_est))
+        AA = np.copy(A)
+        for j in range(0, M):
+            err[j] = np.min(AA)
+            r, c = np.nonzero(AA == err[j])
+            r = r[0]
+            c = c[0]
+            frac_err[j] = abs(frac_true[r] - frac_est[c])
+            AA[r,:] = float('Inf')
+            AA[:,c] = float('Inf')
+            notUsed_true = notUsed_true[notUsed_true != r]
+            notUsed_est = notUsed_est[notUsed_est != c]
 
-# PERCENTAGE ERROR IN THE ESTIMATION OF NUMBER OF PEAKS
-XLS_sheet.write(XLS_row,  1, np.mean(Pd))
-XLS_sheet.write(XLS_row,  2, np.std(Pd))
-XLS_sheet.write(XLS_row,  3, np.min(Pd))
-XLS_sheet.write(XLS_row,  4, stats.scoreatpercentile(Pd,25))
-XLS_sheet.write(XLS_row,  5, np.median(Pd))
-XLS_sheet.write(XLS_row,  6, stats.scoreatpercentile(Pd,75))
-XLS_sheet.write(XLS_row,  7, np.max(Pd))
+        # account for OVER-ESTIMATES
+        if M_true < M_est:
+            if M_true > 0:
+                for j in notUsed_est:
+                    err = np.append(err, min(A[:, j]))
+                    frac_err = np.append(frac_err, frac_est[j])
+            else:
+                err = np.append(err, 45)
+                frac_err = np.append(frac_err, 1)
 
-# NUMBER OF UNDERESTIMATION OF NUMBER OF PEAKS
-XLS_sheet.write(XLS_row,  8, np.mean(nM))
-XLS_sheet.write(XLS_row,  9, np.std(nM))
-XLS_sheet.write(XLS_row, 10, np.min(nM))
-XLS_sheet.write(XLS_row, 11, stats.scoreatpercentile(nM,25))
-XLS_sheet.write(XLS_row, 12, np.median(nM))
-XLS_sheet.write(XLS_row, 13, stats.scoreatpercentile(nM,75))
-XLS_sheet.write(XLS_row, 14, np.max(nM))
+        # account for UNDER-ESTIMATES
+        elif M_true > M_est:
+            if M_est > 0:
+                for j in notUsed_true:
+                    err = np.append(err, min(A[j,:]))
+                    frac_err = np.append(frac_err, frac_true[j])
+            else:
+                err = np.append(err, 45)
+                frac_err = np.append(frac_err, 1)
 
-# NUMBER OF OVERESTIMATION OF NUMBER OF PEAKS
-XLS_sheet.write(XLS_row, 15, np.mean(nP))
-XLS_sheet.write(XLS_row, 16, np.std(nP))
-XLS_sheet.write(XLS_row, 17, np.min(nP))
-XLS_sheet.write(XLS_row, 18, stats.scoreatpercentile(nP,25))
-XLS_sheet.write(XLS_row, 19, np.median(nP))
-XLS_sheet.write(XLS_row, 20, stats.scoreatpercentile(nP,75))
-XLS_sheet.write(XLS_row, 21, np.max(nP))
+        AE[i] = err.mean()
+        FE[i] = frac_err.sum()
 
-# AVERAGE ANGULAR ERROR
-XLS_sheet.write(XLS_row, 22, np.mean(AE))
-XLS_sheet.write(XLS_row, 23, np.std(AE))
-XLS_sheet.write(XLS_row, 24, np.min(AE))
-XLS_sheet.write(XLS_row, 25, stats.scoreatpercentile(AE,25))
-XLS_sheet.write(XLS_row, 26, np.median(AE))
-XLS_sheet.write(XLS_row, 27, stats.scoreatpercentile(AE,75))
-XLS_sheet.write(XLS_row, 28, np.max(AE))
 
-# SUM OF FRACTION ERRORS
-XLS_sheet.write(XLS_row, 29, np.mean(FE))
-XLS_sheet.write(XLS_row, 30, np.std(FE))
-XLS_sheet.write(XLS_row, 31, np.min(FE))
-XLS_sheet.write(XLS_row, 32, stats.scoreatpercentile(FE, 25))
-XLS_sheet.write(XLS_row, 33, np.median(FE))
-XLS_sheet.write(XLS_row, 34, stats.scoreatpercentile(FE, 75))
-XLS_sheet.write(XLS_row, 35, np.max(FE))
+    XLS_sheet.write(XLS_row, 0,  file_name)
+
+    # PERCENTAGE ERROR IN THE ESTIMATION OF NUMBER OF PEAKS
+    XLS_sheet.write(XLS_row,  1, np.mean(Pd))
+    XLS_sheet.write(XLS_row,  2, np.std(Pd))
+    XLS_sheet.write(XLS_row,  3, np.min(Pd))
+    XLS_sheet.write(XLS_row,  4, stats.scoreatpercentile(Pd,25))
+    XLS_sheet.write(XLS_row,  5, np.median(Pd))
+    XLS_sheet.write(XLS_row,  6, stats.scoreatpercentile(Pd,75))
+    XLS_sheet.write(XLS_row,  7, np.max(Pd))
+
+    # NUMBER OF UNDERESTIMATION OF NUMBER OF PEAKS
+    XLS_sheet.write(XLS_row,  8, np.mean(nM))
+    XLS_sheet.write(XLS_row,  9, np.std(nM))
+    XLS_sheet.write(XLS_row, 10, np.min(nM))
+    XLS_sheet.write(XLS_row, 11, stats.scoreatpercentile(nM,25))
+    XLS_sheet.write(XLS_row, 12, np.median(nM))
+    XLS_sheet.write(XLS_row, 13, stats.scoreatpercentile(nM,75))
+    XLS_sheet.write(XLS_row, 14, np.max(nM))
+
+    # NUMBER OF OVERESTIMATION OF NUMBER OF PEAKS
+    XLS_sheet.write(XLS_row, 15, np.mean(nP))
+    XLS_sheet.write(XLS_row, 16, np.std(nP))
+    XLS_sheet.write(XLS_row, 17, np.min(nP))
+    XLS_sheet.write(XLS_row, 18, stats.scoreatpercentile(nP,25))
+    XLS_sheet.write(XLS_row, 19, np.median(nP))
+    XLS_sheet.write(XLS_row, 20, stats.scoreatpercentile(nP,75))
+    XLS_sheet.write(XLS_row, 21, np.max(nP))
+
+    # AVERAGE ANGULAR ERROR
+    XLS_sheet.write(XLS_row, 22, np.mean(AE))
+    XLS_sheet.write(XLS_row, 23, np.std(AE))
+    XLS_sheet.write(XLS_row, 24, np.min(AE))
+    XLS_sheet.write(XLS_row, 25, stats.scoreatpercentile(AE,25))
+    XLS_sheet.write(XLS_row, 26, np.median(AE))
+    XLS_sheet.write(XLS_row, 27, stats.scoreatpercentile(AE,75))
+    XLS_sheet.write(XLS_row, 28, np.max(AE))
+
+    # SUM OF FRACTION ERRORS
+    XLS_sheet.write(XLS_row, 29, np.mean(FE))
+    XLS_sheet.write(XLS_row, 30, np.std(FE))
+    XLS_sheet.write(XLS_row, 31, np.min(FE))
+    XLS_sheet.write(XLS_row, 32, stats.scoreatpercentile(FE, 25))
+    XLS_sheet.write(XLS_row, 33, np.median(FE))
+    XLS_sheet.write(XLS_row, 34, stats.scoreatpercentile(FE, 75))
+    XLS_sheet.write(XLS_row, 35, np.max(FE))
+
+    XLS_row += 1
 
 XLS.save("local_measures.xls")

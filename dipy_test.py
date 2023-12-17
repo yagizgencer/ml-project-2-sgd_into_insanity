@@ -50,8 +50,11 @@ eigenvals = [d_parallel, d_perp, d_perp]
 
 # Generate n pairs of angles 
 n = 180
-H_noisy_input = np.zeros((n, len(real_bvals)))
-H_noisy_validation = np.zeros((n, len(real_bvals)))
+H_snr_10 = np.zeros((n, len(real_bvals)))
+H_snr_15 = np.zeros((n, len(real_bvals)))
+H_snr_20 = np.zeros((n, len(real_bvals)))
+H_snr_25 = np.zeros((n, len(real_bvals)))
+H_snr_30 = np.zeros((n, len(real_bvals)))
 H_noiseless = np.zeros((n, len(real_bvals)))
 thetas = []
 phis = []
@@ -83,18 +86,28 @@ fig.savefig("angle_pairs_visualization_" + str(n) + "_pairs.png")
 angle_pairs = []
 for i in range(len(hemisphere.phi)):
     angle_pairs.append((hemisphere.theta[i] * (180/np.pi), hemisphere.phi[i] * (180/np.pi)))
-    H_noisy_input[i] = multi_tensor(gtab, mevals = [eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100], snr=random.randint(10, 30))[0]
-    H_noisy_validation[i] = multi_tensor(gtab, mevals = [eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100], snr=random.randint(10, 30))[0]
+    H_snr_10[i] = multi_tensor(gtab, mevals = [eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100],
+                               snr=10)[0]
+    H_snr_15[i] = multi_tensor(gtab, mevals=[eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100],
+                               snr=15)[0]
+    H_snr_20[i] = multi_tensor(gtab, mevals=[eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100],
+                               snr=20)[0]
+    H_snr_25[i] = multi_tensor(gtab, mevals=[eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100],
+                               snr=25)[0]
+    H_snr_30[i] = multi_tensor(gtab, mevals=[eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100],
+                               snr=30)[0]
     H_noiseless[i] = multi_tensor(gtab, mevals=[eigenvals], S0=100, angles=[angle_pairs[i]], fractions=[100],snr=None)[0]
 
 N = int(1e5)
 # Generating Nf
-Nf = np.random.randint(3, size=N) + 1
+probabilities = [0.55, 0.30, 0.15]
+Nf = np.random.choice([1,2,3], size=N, p=probabilities)
+
 
 # Creating S and our ground-truth
-S = np.zeros((N, len(real_bvals)))
+S = np.zeros((6*N, len(real_bvals)))
 S_noiseless = np.zeros((N, len(real_bvals)))
-F = np.zeros((N,n))
+F = np.zeros((6*N,n))
 for i, k in enumerate(Nf):
     indices = np.random.choice(n, size=k, replace=False)
     random_nums = np.random.uniform(size=k)
@@ -105,9 +118,19 @@ for i, k in enumerate(Nf):
     if np.sum(random_nums) == 0:
         print(f"Iteration {i}: All zero case encountered for row {i}")
     for j in range(k):
-        S[i] += random_nums[j] * H_noisy_input[indices[j]]
-        S_noiseless[i] += random_nums[j] * H_noiseless[indices[j]]
+        S[i] += random_nums[j] * H_noiseless[indices[j]]
+        S[N + i] += random_nums[j] * H_snr_30[indices[j]]
+        S[2*N + i] += random_nums[j] * H_snr_25[indices[j]]
+        S[3*N + i] += random_nums[j] * H_snr_20[indices[j]]
+        S[4*N + i] += random_nums[j] * H_snr_15[indices[j]]
+        S[5*N + i] += random_nums[j] * H_snr_10[indices[j]]
         F[i][indices[j]] = random_nums[j]
+        F[N + i][indices[j]] = random_nums[j]
+        F[2*N + i][indices[j]] = random_nums[j]
+        F[3*N + i][indices[j]] = random_nums[j]
+        F[4*N + i][indices[j]] = random_nums[j]
+        F[5*N + i][indices[j]] = random_nums[j]
+
 
 # Parameters for peak detection
 relative_peak_threshold = 0.1
@@ -120,8 +143,6 @@ pd.to_pickle(peak_format, "synthetic_data/peaks_synthetic_formatted.pkl")
 np.save("synthetic_data/S.npy", S)
 np.save("synthetic_data/S_noiseless.npy", S_noiseless)
 np.save("synthetic_data/F.npy", F)
-np.save("synthetic_data/H_noisy_input.npy", H_noisy_input)
-np.save("synthetic_data/H_noisy_validation.npy", H_noisy_validation)
 np.save("synthetic_data/H_noiseless.npy", H_noiseless)
 
 with open('synthetic_data/angle_pairs.pkl', 'wb') as file:
