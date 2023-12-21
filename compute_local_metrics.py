@@ -1,266 +1,222 @@
-# This script computes standard scores about local reconstruction quality (detail on http://hardi.epfl.ch/static/events/2013_ISBI/).
-# USAGE:
-#
-# Put all your reconstructions (in nii.gz format as specified on the website) in a folder "reconstructions".
-# The script opens each reconstruction file and stores the corresponding scores in a different row of an output spreadsheet file (local_measures.xls)
-#
-# The scripts expects two files to be in the current folder:
-#   - ground-truth-peaks.nii.gz  -->  contains the ground truth peaks provided by the organizers
-#   - mask.nii.gz  -->  a binary mask to restrict the computation of the metrics in specific regions of the dataset (e.g. white matter voxels)
-#
-# For more information or concerns about this script, please send an email to the organizers.
-#
-import nibabel as nib
+"""
+This script returns the prediction’s error in terms of its percentage error in detected number of peaks,
+angular error of fiber orientations and error in their fraction.
+To work, it needs the ground truth and the predictions in the form of a pickle file in the form of nx42 matrix.
+"""
+
 import numpy as np
 from numpy.linalg import norm
 from scipy import stats
 from math import *
-import sys, glob, xlwt, os.path, re
+import glob, xlwt
+import pandas as pd
 
+ground_truth_path = "real_data/gt_white_masked_validation_padded.pkl"
 
-### load ground-truth directions
-################################
-print("-> opening ground-truth..."),
-
-niiGT = nib.load('ground-truth-peaks.nii.gz')
-niiGT_hdr = niiGT.get_header()
-niiGT_img = niiGT.get_data()
-
-niiGT_dim = niiGT_hdr.get_data_shape()
-
-nx = niiGT_dim[0]
-ny = niiGT_dim[1]
-nz = niiGT_dim[2]
-
-print("[OK]\n")
-
-
-### load mask of interest
-#########################
-print("-> opening binary mask of interest..."),
-
-niiMASK = nib.load('mask.nii.gz')
-niiMASK_hdr = niiMASK.get_header()
-niiMASK_img = niiMASK.get_data()
-
-niiMASK_dim = niiMASK_hdr.get_data_shape()
-
-niiMASK_idx = niiMASK_img==1
-
-print("[OK]\n")
-
-
-### load reconstructions
-########################
-SUBMISSIONs = glob.glob( "reconstructions/*.nii.gz" )
+# read ground-truth
+ground_truth = pd.read_pickle(ground_truth_path)
 
 # prepare EXCEL output
 XLS = xlwt.Workbook()
 XLS_sheet = XLS.add_sheet("Local measures")
 
-XLS_sheet.write( 0,  0, "filename" )
+XLS_sheet.write(0,  0, "filename")
 
 #PERCENTAGE ERROR IN THE ESTIMATION OF NUMBER OF PEAKS
-XLS_sheet.write( 0,  1, "Pd, mean" )
-XLS_sheet.write( 0,  2, "Pd, std" )
-XLS_sheet.write( 0,  3, "Pd, min" )
-XLS_sheet.write( 0,  4, "Pd, 25 perc" )
-XLS_sheet.write( 0,  5, "Pd, 50 perc" )
-XLS_sheet.write( 0,  6, "Pd, 75 perc" )
-XLS_sheet.write( 0,  7, "Pd, max" )
+XLS_sheet.write(0,  1, "Pd, mean")
+XLS_sheet.write(0,  2, "Pd, std")
+XLS_sheet.write(0,  3, "Pd, min")
+XLS_sheet.write(0,  4, "Pd, 25 perc")
+XLS_sheet.write(0,  5, "Pd, 50 perc")
+XLS_sheet.write(0,  6, "Pd, 75 perc")
+XLS_sheet.write(0,  7, "Pd, max")
 
 #NUMBER OF UNDERESTIMATION OF NUMBER OF PEAKS
-XLS_sheet.write( 0,  8, "n-, mean" )
-XLS_sheet.write( 0,  9, "n-, std" )
-XLS_sheet.write( 0, 10, "n-, min" )
-XLS_sheet.write( 0, 11, "n-, 25 perc" )
-XLS_sheet.write( 0, 12, "n-, 50 perc" )
-XLS_sheet.write( 0, 13, "n-, 75 perc" )
-XLS_sheet.write( 0, 14, "n-, max" )
+XLS_sheet.write(0,  8, "n-, mean")
+XLS_sheet.write(0,  9, "n-, std")
+XLS_sheet.write(0, 10, "n-, min")
+XLS_sheet.write(0, 11, "n-, 25 perc")
+XLS_sheet.write(0, 12, "n-, 50 perc")
+XLS_sheet.write(0, 13, "n-, 75 perc")
+XLS_sheet.write(0, 14, "n-, max")
 
 #NUMBER OF OVERESTIMATION OF NUMBER OF PEAKS
-XLS_sheet.write( 0, 15, "n+, mean" )
-XLS_sheet.write( 0, 16, "n+, std" )
-XLS_sheet.write( 0, 17, "n+, min" )
-XLS_sheet.write( 0, 18, "n+, 25 perc" )
-XLS_sheet.write( 0, 19, "n+, 50 perc" )
-XLS_sheet.write( 0, 20, "n+, 75 perc" )
-XLS_sheet.write( 0, 21, "n+, max" )
+XLS_sheet.write(0, 15, "n+, mean")
+XLS_sheet.write(0, 16, "n+, std")
+XLS_sheet.write(0, 17, "n+, min")
+XLS_sheet.write(0, 18, "n+, 25 perc")
+XLS_sheet.write(0, 19, "n+, 50 perc")
+XLS_sheet.write(0, 20, "n+, 75 perc")
+XLS_sheet.write(0, 21, "n+, max")
 
 #AVERAGE ANGULAR ERROR
-XLS_sheet.write( 0, 22, "AE, mean" )
-XLS_sheet.write( 0, 23, "AE, std" )
-XLS_sheet.write( 0, 24, "AE, min" )
-XLS_sheet.write( 0, 25, "AE, 25 perc" )
-XLS_sheet.write( 0, 26, "AE, 50 perc" )
-XLS_sheet.write( 0, 27, "AE, 75 perc" )
-XLS_sheet.write( 0, 28, "AE, max" )
+XLS_sheet.write(0, 22, "AE, mean")
+XLS_sheet.write(0, 23, "AE, std")
+XLS_sheet.write(0, 24, "AE, min")
+XLS_sheet.write(0, 25, "AE, 25 perc")
+XLS_sheet.write(0, 26, "AE, 50 perc")
+XLS_sheet.write(0, 27, "AE, 75 perc")
+XLS_sheet.write(0, 28, "AE, max")
 
+#SUM OF FRACTION ERRORS
+XLS_sheet.write(0, 29, "FE, mean")
+XLS_sheet.write(0, 30, "FE, std")
+XLS_sheet.write(0, 31, "FE, min")
+XLS_sheet.write(0, 32, "FE, 25 perc")
+XLS_sheet.write(0, 33, "FE, 50 perc")
+XLS_sheet.write(0, 34, "FE, 75 perc")
+XLS_sheet.write(0, 35, "FE, max")
 
+peak_size = 14
+predictions_files = glob.glob("trained_model/peak_results/*.pkl")
 XLS_row = 1
-for filename in SUBMISSIONs:
-    print("-> %s" % os.path.basename( filename ))
 
-    print("\t* opening data..."),
+for file_name in predictions_files:
 
-    niiRECON = nib.load( filename )
+    predictions = pd.read_pickle(file_name)
 
-    niiRECON_hdr = niiRECON.header
-    niiRECON_img = niiRECON.get_fdata()
+    Pd = np.zeros(len(ground_truth))
+    nP = np.zeros(len(ground_truth))
+    nM = np.zeros(len(ground_truth))
+    AE = np.zeros(len(ground_truth))
+    FE = np.zeros(len(ground_truth))
 
-    niiRECON_dim = niiRECON_hdr.get_data_shape()
+    for i in range(len(ground_truth)):
 
-    print("[OK]")
+        DIR_true = np.zeros((3, peak_size))
+        DIR_est = np.zeros((3, peak_size))
 
+        frac_true = np.zeros(peak_size)
+        frac_est = np.zeros(peak_size)
 
-    ### check consistency
-    print("\t* checking consistency..."),
+        # compute M_true, DIR_true, M_est, DIR_est
+        M_true = 0
+        for d in range(peak_size):
+            dir = ground_truth[i,range(d*3, d*3+3)]
+            f = norm(dir)
+            if f > 0:
+                frac_true[M_true] = f
+                DIR_true[:,M_true] = dir / f
+                M_true += 1
+        frac_true /= frac_true.sum()
 
-    if len(niiRECON_dim) != len(niiGT_dim) :
-        raise Exception("The shape of GROUND-TRUTH and RECONSTRUCTION do not match")
-    if niiRECON_dim != niiGT_dim :
-        raise Exception("'dim' of GROUND-TRUTH and RECONSTRUCTION do not match")
+        M_est = 0
+        for d in range(peak_size):
+            dir = predictions[i, range(d*3, d*3+3)]
+            f = norm(dir)
+            if f > 0:
+                frac_est[M_est] = f
+                DIR_est[:,M_est] = dir / f
+                M_est += 1
+        frac_est /= (frac_est.sum() + 1e-8)
 
-    print("[OK]")
+        # compute Pd, nM and nP
+        M_diff = M_true - M_est
+        Pd[i] = 100 * abs(M_diff) / M_true
+        if M_diff > 0:
+            nM[i] = M_diff
+        else:
+            nP[i] = -M_diff
 
+        # ANGULAR ACCURACY
 
-    ### compute local metrics
-    print("\t* computing local metrics..."),
-    sys.stdout.flush()
-
-    Pd = np.zeros( niiGT_dim[0:3] )
-    nP = np.zeros( niiGT_dim[0:3] )
-    nM = np.zeros( niiGT_dim[0:3] )
-    AE = np.zeros( niiGT_dim[0:3] )
-
-    for z in range(0,nz):
-        for y in range(0,ny):
-            for x in range(0,nx):
-                if niiMASK_img[x,y,z] == 0 :
-                    continue
-
-                # NUMBER OF FIBER POPULATIONS
-                #############################
-
-                DIR_true = np.zeros( (3,5) )
-                DIR_est  = np.zeros( (3,5) )
-
-                # compute M_true, DIR_true, M_est, DIR_est
-                M_true = 0
-                for d in range(5) :
-                    dir = niiGT_img[x,y,z,range(d*3, d*3+3)]
-                    f = norm( dir )
-                    if f > 0 :
-                        DIR_true[:,M_true] = dir / f
-                        M_true += 1
-                if M_true == 0 :
-                    niiMASK_img[x,y,z] = 0 # do not consider this voxel in the final score
-                    continue    # no fiber compartments found in the voxel
-
-                M_est = 0
-                for d in range(5) :
-                    dir = niiRECON_img[x,y,z,range(d*3, d*3+3)]
-                    f = norm( dir )
-                    if f > 0 :
-                        DIR_est[:,M_est] = dir / f
-                        M_est += 1
-
-                # compute Pd, nM and nP
-                M_diff = M_true - M_est
-                Pd[x,y,z] = 100 * abs(M_diff) / M_true
-                if  M_diff > 0 :
-                    nM[x,y,z] = M_diff
-                else :
-                    nP[x,y,z] = -M_diff
-
-                # ANGULAR ACCURACY
-                ##################
-
-                # precompute matrix with angular errors among all estimated and true fibers
-                A = np.zeros( (M_true, M_est) )
-                for i in range(0,M_true) :
-                    for j in range(0,M_est) :
-                        err = acos( min( 1.0, abs(np.dot( DIR_true[:,i], DIR_est[:,j] )) ) ) # crop to 1 for internal precision
-                        A[i,j] = min( err, pi-err) / pi * 180
-
-                # compute the "base" error
-                M = min(M_true,M_est)
-                err = np.zeros( M )
-                notUsed_true = np.array(range(M_true))
-                notUsed_est = np.array(range(M_est))
-                AA = np.copy( A )
-                for i in range(0,M) :
-                    err[i] = np.min( AA )
-                    r, c = np.nonzero( AA==err[i] )
-                    AA[r[0],:] = float('Inf')
-                    AA[:,c[0]] = float('Inf')
-                    notUsed_true = notUsed_true[ notUsed_true != r[0] ]
-                    notUsed_est  = notUsed_est[  notUsed_est  != c[0] ]
-
-                # account for OVER-ESTIMATES
-                if M_true < M_est :
-                    if M_true > 0:
-                        for i in notUsed_est :
-                            err = np.append( err, min( A[:,i] ) )
-                    else :
-                        err = np.append( err, 45 )
-                # account for UNDER-ESTIMATES
-                elif M_true > M_est :
-                    if M_est > 0:
-                        for i in notUsed_true :
-                            err = np.append( err, min( A[i,:] ) )
-                    else :
-                        err = np.append( err, 45 )
-
-                AE[x,y,z] = np.mean( err )
-
-    print("[OK]")
+        # precompute matrix with angular errors among all estimated and true fibers
+        A = np.zeros((M_true, M_est))
+        for j in range(0, M_true):
+            for k in range(0, M_est):
+                err = acos(min(1.0, abs(np.dot(DIR_true[:, j], DIR_est[:, k])))) # crop to 1 for internal precision
+                A[j,k] = min(err, pi-err) / pi * 180
 
 
-    # write to EXCEL file
-    XLS_sheet.write( XLS_row,  0, filename )
+        # compute the "base" error
+        M = min(M_true,M_est)
+        err = np.zeros(M)
+        frac_err = np.zeros(M)
+        notUsed_true = np.array(range(M_true))
+        notUsed_est = np.array(range(M_est))
+        AA = np.copy(A)
+        for j in range(0, M):
+            err[j] = np.min(AA)
+            r, c = np.nonzero(AA == err[j])
+            r = r[0]
+            c = c[0]
+            frac_err[j] = abs(frac_true[r] - frac_est[c])
+            AA[r,:] = float('Inf')
+            AA[:,c] = float('Inf')
+            notUsed_true = notUsed_true[notUsed_true != r]
+            notUsed_est = notUsed_est[notUsed_est != c]
 
-    values = Pd[niiMASK_idx] #Consider only the voxels indicated by the mask
+        # account for OVER-ESTIMATES
+        if M_true < M_est:
+            if M_true > 0:
+                for j in notUsed_est:
+                    err = np.append(err, min(A[:, j]))
+                    frac_err = np.append(frac_err, frac_est[j])
+            else:
+                err = np.append(err, 45)
+                frac_err = np.append(frac_err, 1)
+
+        # account for UNDER-ESTIMATES
+        elif M_true > M_est:
+            if M_est > 0:
+                for j in notUsed_true:
+                    err = np.append(err, min(A[j,:]))
+                    frac_err = np.append(frac_err, frac_true[j])
+            else:
+                err = np.append(err, 45)
+                frac_err = np.append(frac_err, 1)
+
+        AE[i] = err.mean()
+        FE[i] = frac_err.sum()
+
+
+    XLS_sheet.write(XLS_row, 0,  file_name)
+
     # PERCENTAGE ERROR IN THE ESTIMATION OF NUMBER OF PEAKS
-    XLS_sheet.write( XLS_row,  1, np.mean(values) )
-    XLS_sheet.write( XLS_row,  2, np.std(values) )
-    XLS_sheet.write( XLS_row,  3, np.min(values) )
-    XLS_sheet.write( XLS_row,  4, stats.scoreatpercentile(values,25) )
-    XLS_sheet.write( XLS_row,  5, np.median(values) )
-    XLS_sheet.write( XLS_row,  6, stats.scoreatpercentile(values,75) )
-    XLS_sheet.write( XLS_row,  7, np.max(values) )
+    XLS_sheet.write(XLS_row,  1, np.mean(Pd))
+    XLS_sheet.write(XLS_row,  2, np.std(Pd))
+    XLS_sheet.write(XLS_row,  3, np.min(Pd))
+    XLS_sheet.write(XLS_row,  4, stats.scoreatpercentile(Pd,25))
+    XLS_sheet.write(XLS_row,  5, np.median(Pd))
+    XLS_sheet.write(XLS_row,  6, stats.scoreatpercentile(Pd,75))
+    XLS_sheet.write(XLS_row,  7, np.max(Pd))
 
-    values = nM[niiMASK_idx]
     # NUMBER OF UNDERESTIMATION OF NUMBER OF PEAKS
-    XLS_sheet.write( XLS_row,  8, np.mean(values) )
-    XLS_sheet.write( XLS_row,  9, np.std(values) )
-    XLS_sheet.write( XLS_row, 10, np.min(values) )
-    XLS_sheet.write( XLS_row, 11, stats.scoreatpercentile(values,25) )
-    XLS_sheet.write( XLS_row, 12, np.median(values) )
-    XLS_sheet.write( XLS_row, 13, stats.scoreatpercentile(values,75) )
-    XLS_sheet.write( XLS_row, 14, np.max(values) )
+    XLS_sheet.write(XLS_row,  8, np.mean(nM))
+    XLS_sheet.write(XLS_row,  9, np.std(nM))
+    XLS_sheet.write(XLS_row, 10, np.min(nM))
+    XLS_sheet.write(XLS_row, 11, stats.scoreatpercentile(nM,25))
+    XLS_sheet.write(XLS_row, 12, np.median(nM))
+    XLS_sheet.write(XLS_row, 13, stats.scoreatpercentile(nM,75))
+    XLS_sheet.write(XLS_row, 14, np.max(nM))
 
-    values = nP[niiMASK_idx]
     # NUMBER OF OVERESTIMATION OF NUMBER OF PEAKS
-    XLS_sheet.write( XLS_row, 15, np.mean(values) )
-    XLS_sheet.write( XLS_row, 16, np.std(values) )
-    XLS_sheet.write( XLS_row, 17, np.min(values) )
-    XLS_sheet.write( XLS_row, 18, stats.scoreatpercentile(values,25) )
-    XLS_sheet.write( XLS_row, 19, np.median(values) )
-    XLS_sheet.write( XLS_row, 20, stats.scoreatpercentile(values,75) )
-    XLS_sheet.write( XLS_row, 21, np.max(values) )
+    XLS_sheet.write(XLS_row, 15, np.mean(nP))
+    XLS_sheet.write(XLS_row, 16, np.std(nP))
+    XLS_sheet.write(XLS_row, 17, np.min(nP))
+    XLS_sheet.write(XLS_row, 18, stats.scoreatpercentile(nP,25))
+    XLS_sheet.write(XLS_row, 19, np.median(nP))
+    XLS_sheet.write(XLS_row, 20, stats.scoreatpercentile(nP,75))
+    XLS_sheet.write(XLS_row, 21, np.max(nP))
 
-    values = AE[niiMASK_idx]
     # AVERAGE ANGULAR ERROR
-    XLS_sheet.write( XLS_row, 22, np.mean(values) )
-    XLS_sheet.write( XLS_row, 23, np.std(values) )
-    XLS_sheet.write( XLS_row, 24, np.min(values) )
-    XLS_sheet.write( XLS_row, 25, stats.scoreatpercentile(values,25) )
-    XLS_sheet.write( XLS_row, 26, np.median(values) )
-    XLS_sheet.write( XLS_row, 27, stats.scoreatpercentile(values,75) )
-    XLS_sheet.write( XLS_row, 28, np.max(values) )
+    XLS_sheet.write(XLS_row, 22, np.mean(AE))
+    XLS_sheet.write(XLS_row, 23, np.std(AE))
+    XLS_sheet.write(XLS_row, 24, np.min(AE))
+    XLS_sheet.write(XLS_row, 25, stats.scoreatpercentile(AE,25))
+    XLS_sheet.write(XLS_row, 26, np.median(AE))
+    XLS_sheet.write(XLS_row, 27, stats.scoreatpercentile(AE,75))
+    XLS_sheet.write(XLS_row, 28, np.max(AE))
+
+    # SUM OF FRACTION ERRORS
+    XLS_sheet.write(XLS_row, 29, np.mean(FE))
+    XLS_sheet.write(XLS_row, 30, np.std(FE))
+    XLS_sheet.write(XLS_row, 31, np.min(FE))
+    XLS_sheet.write(XLS_row, 32, stats.scoreatpercentile(FE, 25))
+    XLS_sheet.write(XLS_row, 33, np.median(FE))
+    XLS_sheet.write(XLS_row, 34, stats.scoreatpercentile(FE, 75))
+    XLS_sheet.write(XLS_row, 35, np.max(FE))
 
     XLS_row += 1
-
 
 XLS.save("local_measures.xls")
